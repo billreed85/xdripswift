@@ -3,7 +3,7 @@ import os
 import Contacts
 
 class ContactImageManager: NSObject {
-    //bill was here
+    //bill was here 10/22/24
     // MARK: - private properties
     
     /// CoreDataManager to use
