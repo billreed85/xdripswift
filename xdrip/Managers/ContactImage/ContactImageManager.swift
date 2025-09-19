@@ -99,7 +99,11 @@ class ContactImageManager: NSObject {
             // as otherwise it would always be out of date
             let disableContactImage: Bool = !UserDefaults.standard.enableContactImage || (!UserDefaults.standard.isMaster && UserDefaults.standard.followerBackgroundKeepAliveType == .disabled)
             
+<<<<<<< HEAD
             // [BILL] TIME CHANGE on valueIsUpToDate: 7 * 60 changed to 5 * 60  
+=======
+            // [BILL] TIME CHANGE on valueIsUpToDate: 7 * 60 changed to 5 * 60
+>>>>>>> ac55585a (update new version with bill specific updates.)
             if lastReading.count > 0  {
                 let valueIsUpToDate = abs(lastReading[0].timeStamp.timeIntervalSinceNow) < 5 * 60
                 
@@ -111,6 +115,10 @@ class ContactImageManager: NSObject {
                     trace("in updateContact, no updates received for more than 5 minutes", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .error)
                     self.updateContact()
                 })
+<<<<<<< HEAD
+=======
+                
+>>>>>>> ac55585a (update new version with bill specific updates.)
                 //[BILL] TIME CHANGE on DispatchQueue: Change 5 * 60 to 1 * 60 to make the blood sugar update more often.
                 DispatchQueue.main.asyncAfter(deadline: .now() + (1 * 60) + 15, execute: self.workItem!)
             } else {
