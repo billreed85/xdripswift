@@ -67,6 +67,14 @@ class ContactImageManager: NSObject {
         
         guard let keyPath = keyPath else {return}
         if let keyPathEnum = UserDefaults.Key(rawValue: keyPath) {
+            // If enableContactImage is being set to false, delete all app contacts
+            if keyPathEnum == .enableContactImage {
+                let newValue = UserDefaults.standard.enableContactImage
+                if newValue == false {
+                    deleteAppContacts()
+                    return
+                }
+            }
             evaluateUserDefaultsChange(keyPathEnum: keyPathEnum)
         }
         
@@ -143,14 +151,6 @@ class ContactImageManager: NSObject {
             } else {
                 // create an 'empty' image view if there is no BG data to show
                 contactImageView = ContactImageView(bgValue: 0, isMgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl, slopeArrow: "", bgRangeDescription: .inRange, valueIsUpToDate: false, useHighContrastContactImage: false, disableContactImage:  disableContactImage)
-
-                //[Bill] After an empty image is created set a timer to trigger updateContact(). This is to fix the error of not updating contact image after losing connection for a long period of time.
-                self.workItem = DispatchWorkItem { [weak self] in
-                    guard let self = self else { return }
-                    trace("in updateContact, empty image created. Retrying updateContact", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info)
-                    self.updateContact()
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + (2 * 60) + 15, execute: self.workItem!)
             }
             
             // we're going to use the app name as the given name of the contact we want to use/create/update
@@ -163,15 +163,15 @@ class ContactImageManager: NSObject {
                let contact = (try? self.contactStore.unifiedContacts(matching: CNContact.predicateForContacts(withIdentifiers: [identifier]), keysToFetch: keyToFetch))?.first,
                contact.givenName == ConstantsHomeView.applicationName {
                 if lastReading.count > 0 {
-                    trace("in updateContact, contact found using stored identifier. Updating the contact image to %{public}@%{public}@", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, lastReading[0].calculatedValue.mgDlToMmolAndToString(mgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl), UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
-                } else {
-                    trace("in updateContact, contact wasn't found using stored identifier. Trying to match by app name", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info)
+                    trace("in updateContact, contact found by identifier. Updating the contact image to %{public}@ %{public}@.", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName, lastReading[0].calculatedValue.mgDlToMmolAndToString(mgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl), UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
                 }
                 guard let mutableContact = contact.mutableCopy() as? CNMutableContact else { return }
                 mutableContact.imageData = contactImageView.getImage().pngData()
                 mutableContact.organizationName = updatedString
                 saveRequest.update(mutableContact)
                 self.executeSaveRequest(saveRequest: saveRequest)
+                // After update, delete all other app contacts except this one
+                self.deleteAppContacts(exceptFor: contact.identifier)
                 return
             }
             
@@ -182,7 +182,7 @@ class ContactImageManager: NSObject {
             if let contact = contacts.first {
                 // Fallback: update the first contact with the app name if none have the note (legacy or bug)
                 if lastReading.count > 0 {
-                    trace("in updateContact, '%{public}@' contact found using application name. Updating the contact image to %{public}@%{public}@", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName, lastReading[0].calculatedValue.mgDlToMmolAndToString(mgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl), UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+                    trace("in updateContact, '%{public}@' contact found (by name only). Updating the contact image to %{public}@ %{public}@.", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName, lastReading[0].calculatedValue.mgDlToMmolAndToString(mgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl), UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
                 }
                 guard let mutableContact = contact.mutableCopy() as? CNMutableContact else { return }
                 mutableContact.imageData = contactImageView.getImage().pngData()
@@ -190,11 +190,13 @@ class ContactImageManager: NSObject {
                 saveRequest.update(mutableContact)
                 // Store identifier for future updates
                 UserDefaults.standard.set(contact.identifier, forKey: self.contactIdentifierKey)
+                // After update, delete all other app contacts except this one
+                self.deleteAppContacts(exceptFor: contact.identifier)
             } else {
                 if lastReading.count > 0 {
-                    trace("in updateContact, no existing contact found. Creating a new contact called '%{public}@' and adding a contact image with %{public}@ %{public}@", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName, lastReading[0].calculatedValue.mgDlToMmolAndToString(mgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl), UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+                    trace("in updateContact, no existing contact found. Creating a new contact called '%{public}@' and adding a contact image with %{public}@ %{public}@.", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName, lastReading[0].calculatedValue.mgDlToMmolAndToString(mgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl), UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
                 } else {
-                    trace("in updateContact, no existing contact found. Creating a new contact called '%{public}@' with empty contact image (no BG data)", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName)
+                    trace("in updateContact, no existing contact found. Creating a new contact called '%{public}@' with empty contact image (no BG data).", log: self.log, category: ConstantsLog.categoryContactImageManager, type: .info, ConstantsHomeView.applicationName)
                 }
                 let contact = CNMutableContact()
                 var appVersion: String = " "
@@ -207,11 +209,32 @@ class ContactImageManager: NSObject {
                 saveRequest.add(contact, toContainerWithIdentifier: nil)
                 // Store identifier for future updates
                 UserDefaults.standard.set(contact.identifier, forKey: self.contactIdentifierKey)
+                // After creation, delete all other app contacts except this one
+                self.deleteAppContacts(exceptFor: contact.identifier)
             }
             self.executeSaveRequest(saveRequest: saveRequest)
         }
     }
     
+    /// Delete all contacts with the app name as givenName except optionally the one with the given identifier
+    private func deleteAppContacts(exceptFor identifierToKeep: String? = nil) {
+        let keyToFetch = [CNContactGivenNameKey, CNContactIdentifierKey] as [CNKeyDescriptor]
+        let predicate = CNContact.predicateForContacts(matchingName: ConstantsHomeView.applicationName)
+        let saveRequest = CNSaveRequest()
+        if let contacts = try? self.contactStore.unifiedContacts(matching: predicate, keysToFetch: keyToFetch) {
+            var didDelete = false
+            for contact in contacts {
+                if identifierToKeep == nil || contact.identifier != identifierToKeep,
+                   let mutableContact = contact.mutableCopy() as? CNMutableContact {
+                    saveRequest.delete(mutableContact)
+                    didDelete = true
+                }
+            }
+            if didDelete {
+                self.executeSaveRequest(saveRequest: saveRequest)
+            }
+        }
+    }
     
     private func executeSaveRequest(saveRequest: CNSaveRequest) {
         // now execute the saveRequest - to delete the existing contact
