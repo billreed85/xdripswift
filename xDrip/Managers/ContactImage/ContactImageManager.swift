@@ -125,8 +125,9 @@ class ContactImageManager: NSObject {
             // as otherwise it would always be out of date
             let disableContactImage: Bool = !UserDefaults.standard.enableContactImage || (!UserDefaults.standard.isMaster && UserDefaults.standard.followerBackgroundKeepAliveType == .disabled)
             
+            // [BILL] TIME CHANGE on valueIsUpToDate: 7 * 60 changed to 5 * 60
             if lastReading.count > 0  {
-                let valueIsUpToDate = abs(lastReading[0].timeStamp.timeIntervalSinceNow) < 7 * 60
+                let valueIsUpToDate = abs(lastReading[0].timeStamp.timeIntervalSinceNow) < 5 * 60
                 
                 contactImageView = ContactImageView(bgValue: lastReading[0].calculatedValue, isMgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl, slopeArrow: UserDefaults.standard.displayTrendInContactImage ? lastReading[0].slopeArrow() : "", bgRangeDescription: lastReading[0].bgRangeDescription(), valueIsUpToDate: valueIsUpToDate, useHighContrastContactImage: UserDefaults.standard.useHighContrastContactImage, disableContactImage:  disableContactImage)
                 
@@ -137,7 +138,8 @@ class ContactImageManager: NSObject {
                     self.updateContact()
                 }
                 
-                DispatchQueue.main.asyncAfter(deadline: .now() + (5 * 60) + 15, execute: self.workItem!)
+                //[BILL] TIME CHANGE on DispatchQueue: Change 5 * 60 to 1 * 60 to make the blood sugar update more often.
+                DispatchQueue.main.asyncAfter(deadline: .now() + (1 * 60) + 15, execute: self.workItem!)
             } else {
                 // create an 'empty' image view if there is no BG data to show
                 contactImageView = ContactImageView(bgValue: 0, isMgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl, slopeArrow: "", bgRangeDescription: .inRange, valueIsUpToDate: false, useHighContrastContactImage: false, disableContactImage:  disableContactImage)
